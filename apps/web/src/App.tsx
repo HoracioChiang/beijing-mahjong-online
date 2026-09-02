@@ -157,8 +157,6 @@ function GameRoomView({ state, self, legalActions, ting }: { state: PublicRoomSt
           {isHost && players.length < 4 && <button className="secondary-button" onClick={() => addBot()}>🤖 添加机器人</button>}
           {isHost && players.length < 4 && players.length >= 1 && <button className="primary-button" onClick={addBotsAndStart}>添加机器人并开始</button>}
           {isHost && round?.phase === "WAITING_FOR_PLAYERS" && players.length === 4 && players.every((player) => player.ready) && <button className="primary-button" onClick={startGame}>开始游戏</button>}
-          {isHost && round?.phase === "SETTLEMENT" && <button className="primary-button" onClick={startGame}>下一局</button>}
-          {isHost && round?.phase === "POT_SETTLEMENT" && <button className="primary-button" onClick={startGame}>再来一锅</button>}
           {canRoll && <DiceButton round={round} onRoll={rollDice} />}
           {hasAction("hu") && <button className="action-button hu-button" onClick={() => round?.phase === "WAITING_FOR_REACTIONS" ? reaction("hu") : hu()}>胡</button>}
           {hasAction("peng") && <button className="action-button" onClick={() => reaction("peng")}>碰</button>}
@@ -173,7 +171,7 @@ function GameRoomView({ state, self, legalActions, ting }: { state: PublicRoomSt
 
       {showBoard && <Leaderboard players={players} />}
       {showHistory && <History history={state.history} />}
-      {settlement && <SettlementOverlay settlement={settlement} onContinue={startGame} />}
+      {settlement && self && <SettlementOverlay settlement={settlement} ready={self.ready} onContinue={ready} />}
       {voiceError && <div className="floating-error" onClick={() => setVoiceError(null)}>{voiceError}</div>}
       <label className="sound-toggle"><input type="checkbox" checked={sound} onChange={(event) => { setSound(event.target.checked); setSoundEnabled(event.target.checked); }} /> 音效</label>
     </main>
@@ -296,9 +294,9 @@ function History({ history }: { history: Array<Record<string, unknown>> }) {
   return <aside className="side-panel history-panel"><h2>牌局记录</h2>{history.length === 0 ? <p className="muted">还没有完成的牌局。</p> : [...history].reverse().map((item, index) => <div className="history-row" key={index}><b>{String(item.roundWind ?? "")}{String(item.handNumber)} 局</b><span>{String(item.winner ?? "荒庄")} · {String(item.winType)}</span><small>{new Date(String(item.timestamp)).toLocaleTimeString()}</small></div>)}</aside>;
 }
 
-function SettlementOverlay({ settlement, onContinue }: { settlement: unknown; onContinue: () => void }) {
+function SettlementOverlay({ settlement, ready, onContinue }: { settlement: unknown; ready: boolean; onContinue: () => void }) {
   const data = settlement as { winnerName?: string; method?: string; potEnded?: boolean; players?: Array<{ playerId: string; nickname: string; score: number }>; potSummary?: Array<{ playerId: string; nickname: string; totalWins: number; selfDrawWins: number; discardCount: number; maxSingleWin: number; continuationWins: number; winRate: number; score: number }>; score?: { totalMultiplier?: number; breakdown?: Array<{ label: string; multiplier: number }>; deltas?: Record<string, number> } };
-  return <div className="overlay"><div className="settlement-card"><p className="eyebrow">{data.potEnded ? "POT SETTLEMENT" : "ROUND SETTLEMENT"}</p><h2>{data.potEnded ? "本锅结束" : data.winnerName ? `胡牌：${data.winnerName}` : "荒庄"}</h2><p className="win-method">{data.method}{data.score?.totalMultiplier ? ` · 总倍率 ×${data.score.totalMultiplier}` : ""}</p>{data.score?.breakdown?.length ? <div className="breakdown">{data.score.breakdown.map((item) => <span key={item.label}>{item.label} <b>×{item.multiplier}</b></span>)}</div> : null}{data.potEnded && data.potSummary?.length ? <div className="pot-summary">{data.potSummary.map((item) => <div key={item.playerId}><b>{item.nickname}</b><small>胡 {item.totalWins} · 自摸 {item.selfDrawWins} · 点炮 {item.discardCount} · 最大单局 {item.maxSingleWin} · 连庄 {item.continuationWins} · 胡牌率 {item.winRate}%</small><strong>{item.score >= 0 ? "+" : ""}{item.score}</strong></div>)}</div> : null}<div className="settlement-deltas">{Object.entries(data.score?.deltas ?? {}).map(([playerId, delta]) => <span key={playerId}><b>{data.players?.find((player) => player.playerId === playerId)?.nickname ?? playerId.slice(-6)}</b><strong className={delta < 0 ? "negative" : ""}>{delta >= 0 ? "+" : ""}{delta}</strong></span>)}</div><button className="primary-button" onClick={onContinue}>{data.potEnded ? "再来一锅" : "准备下一局"}</button></div></div>;
+  return <div className="overlay"><div className="settlement-card"><p className="eyebrow">{data.potEnded ? "POT SETTLEMENT" : "ROUND SETTLEMENT"}</p><h2>{data.potEnded ? "本锅结束" : data.winnerName ? `胡牌：${data.winnerName}` : "荒庄"}</h2><p className="win-method">{data.method}{data.score?.totalMultiplier ? ` · 总倍率 ×${data.score.totalMultiplier}` : ""}</p>{data.score?.breakdown?.length ? <div className="breakdown">{data.score.breakdown.map((item) => <span key={item.label}>{item.label} <b>×{item.multiplier}</b></span>)}</div> : null}{data.potEnded && data.potSummary?.length ? <div className="pot-summary">{data.potSummary.map((item) => <div key={item.playerId}><b>{item.nickname}</b><small>胡 {item.totalWins} · 自摸 {item.selfDrawWins} · 点炮 {item.discardCount} · 最大单局 {item.maxSingleWin} · 连庄 {item.continuationWins} · 胡牌率 {item.winRate}%</small><strong>{item.score >= 0 ? "+" : ""}{item.score}</strong></div>)}</div> : null}<div className="settlement-deltas">{Object.entries(data.score?.deltas ?? {}).map(([playerId, delta]) => <span key={playerId}><b>{data.players?.find((player) => player.playerId === playerId)?.nickname ?? playerId.slice(-6)}</b><strong className={delta < 0 ? "negative" : ""}>{delta >= 0 ? "+" : ""}{delta}</strong></span>)}</div><button className="primary-button" onClick={onContinue}>{ready ? "已准备，等待其他玩家" : data.potEnded ? "再来一锅" : "准备下一局"}</button></div></div>;
 }
 
 export default App;

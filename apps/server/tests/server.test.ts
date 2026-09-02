@@ -195,4 +195,14 @@ describe("server-controlled bots and dice", () => {
     for (const player of players) player.ready = true; created.room.startGame(created.player.playerId); expect(created.room.round?.floorMultiplier).toBe(2);
     finishDraw(); for (const player of players) player.ready = true; created.room.startGame(created.player.playerId); expect(created.room.round?.floorMultiplier).toBe(2); created.room.destroy();
   });
+  it("requires settlement readiness before starting the next hand and lets bots be ready automatically", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("Human"); while (created.room.playerCount() < 4) created.room.addBot();
+    for (const player of created.room.players) if (player) player.ready = true; created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of created.room.players) if (player && created.room.needsDealerRoll(player.playerId)) created.room.botRollDealerDice(player.playerId);
+    if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.botRollWallDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
+    const finishDraw = (created.room as unknown as { finishDrawRound: () => void }).finishDrawRound.bind(created.room);
+    finishDraw(); expect(created.room.round?.phase).toBe("SETTLEMENT"); expect(created.room.players.slice(1).every((player) => player?.ready)).toBe(true);
+    expect(() => created.room.startGame(created.player.playerId)).toThrow("需要四位玩家全部准备");
+    created.room.setReady(created.player.playerId, true); expect(created.room.round?.phase).toBe("ROLLING_FOR_WALL"); created.room.destroy();
+  });
 });

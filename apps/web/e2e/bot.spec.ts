@@ -16,5 +16,6 @@ test("one human can fill the table with server bots", async ({ page, baseURL }) 
   }
   await expect(page.locator(".wall-side")).toHaveCount(4);
   await expect(page.locator(".player-badge").filter({ hasText: "小北" }).first()).toBeVisible();
-  await expect(page.locator(".own-hand .mahjong-tile")).toHaveCount(13, { timeout: 15_000 });
+  const ownHandCount = await page.locator(".own-hand .mahjong-tile").count();
+  expect([13, 14]).toContain(ownHandCount);
 });

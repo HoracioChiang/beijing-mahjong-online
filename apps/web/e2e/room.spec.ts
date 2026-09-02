@@ -55,6 +55,8 @@ test("four browsers can create, join, ready, start, and refresh without losing i
       if (!settled) await pages[0]!.waitForTimeout(25);
     }
     await expect(pages[0]!.locator(".settlement-card")).toBeVisible({ timeout: 5_000 });
+    for (const page of pages) await page.getByRole("button", { name: "准备下一局", exact: true }).click();
+    await expect(pages[0]!.getByText("庄家开牌", { exact: true })).toBeVisible({ timeout: 5_000 });
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }
