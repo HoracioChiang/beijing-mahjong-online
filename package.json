@@ -1,0 +1,19 @@
+{
+  "name": "beijing-mahjong-online",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @beijing-mahjong/web --filter @beijing-mahjong/server dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @beijing-mahjong/server start",
+    "test": "pnpm -r test",
+    "test:e2e": "playwright test",
+    "lint": "pnpm -r lint",
+    "simulate": "pnpm --filter @beijing-mahjong/server simulate",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "typescript": "^5.6.3"
+  }
+}
