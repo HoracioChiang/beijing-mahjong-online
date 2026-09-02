@@ -18,7 +18,8 @@ export const BeijingDefaultRules: RuleConfig = {
     ZHUANG: 2, DIANPAO: 1
   },
   enableVoiceChat: true,
-  autoStart: false
+  autoStart: false,
+  newPotScorePolicy: "RESET"
 };
 
 export const cloneRules = (source: RuleConfig = BeijingDefaultRules): RuleConfig => ({

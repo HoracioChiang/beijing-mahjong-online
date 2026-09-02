@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ActionResolver } from "../src/action-resolver.js";
 import { GameRoom } from "../src/room.js";
 import { RoomManager } from "../src/room-manager.js";
+import { SimpleBotStrategy } from "../src/bot-strategy.js";
+import { vi } from "vitest";
 
 const payload = (kind: "hu" | "kong" | "peng" | "chi" | "pass") => ({ actionId: `action-${kind}-12345678`, version: 1, kind });
 
@@ -52,6 +54,10 @@ describe("authoritative GameRoom state", () => {
     for (const nickname of ["B", "C", "D"]) players.push(manager.join(created.room.roomId, nickname).player);
     for (const player of players) created.room.setReady(player.playerId, true);
     created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") {
+      for (const player of players) if (created.room.needsDealerRoll(player.playerId)) created.room.rollDice(player.playerId);
+    }
+    if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.rollDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
     return { room: created.room, players };
   };
   it("partitions deal, indicator, live wall and dead wall to 136 entities", () => {
@@ -59,8 +65,8 @@ describe("authoritative GameRoom state", () => {
     const round = room.round!;
     const total = players.reduce((sum, player) => sum + player.hand.length + player.melds.reduce((n, meld) => n + meld.tiles.length, 0) + player.discards.length, 0) + round.liveWall.length + round.deadWall.length + 1;
     expect(total).toBe(136);
-    expect(round.deadWall).toHaveLength(14);
-    expect(round.liveWall).toHaveLength(68);
+    expect(round.deadWall).toHaveLength(13);
+    expect(round.liveWall).toHaveLength(69);
   });
   it("never includes another player's concealed tile in serialized JSON", () => {
     const { room, players } = readyRoom();
@@ -107,5 +113,74 @@ describe("authoritative GameRoom state", () => {
     const current = players.find((player) => player.seat === room.round!.currentSeat)!;
     const joker = current.hand.find((candidate) => candidate.type === room.round!.jokerType);
     if (joker) expect(() => room.discard(current.playerId, joker.tileId, "joker-action-12345678", room.round!.version)).toThrow("混儿");
+  });
+});
+
+describe("server-controlled bots and dice", () => {
+  it.each([1, 2, 3])("starts with %i human player(s) and fills the table with bots", (humanCount) => {
+    const manager = new RoomManager(); const first = manager.createRoom("Human-1");
+    for (let index = 1; index < humanCount; index += 1) manager.join(first.room.roomId, `Human-${index + 1}`);
+    while (first.room.playerCount() < 4) first.room.addBot();
+    for (const player of first.room.players) if (player) player.ready = true;
+    first.room.startGame(first.player.playerId);
+    while (first.room.round?.phase === "DETERMINING_DEALER") for (const player of first.room.players) if (player && first.room.needsDealerRoll(player.playerId)) first.room.rollDice(player.playerId);
+    if (first.room.round?.phase === "ROLLING_FOR_WALL") first.room.rollDice(first.room.getPlayerBySeat(first.room.round.dealerSeat).playerId);
+    expect(first.room.round?.phase).toBe("WAITING_FOR_DISCARD");
+    expect(first.room.players.filter((player) => player?.playerType === "BOT")).toHaveLength(4 - humanCount);
+    first.room.destroy();
+  });
+  it("keeps bot input on the same authoritative APIs and never discards a joker", () => {
+    const strategy = new SimpleBotStrategy();
+    const joker = { tileId: "joker-0", type: 31 as never }; const ordinary = { tileId: "ordinary-0", type: 0 as never };
+    const tileId = strategy.chooseDiscard({ hand: [joker, ordinary], melds: [] }, { jokerType: 31 as never, legalActions: [{ kind: "discard" }] });
+    expect(tileId).toBe(ordinary.tileId);
+    expect(strategy.chooseReaction({ hand: [], melds: [] }, { jokerType: null, legalActions: [{ kind: "pass" }] }).kind).toBe("pass");
+    expect(strategy.chooseReaction({ hand: [], melds: [] }, { jokerType: null, legalActions: [{ kind: "hu" }, { kind: "pass" }] }).kind).toBe("hu");
+  });
+  it("records server-generated dealer rolls and reroll rounds", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("A"); const players = [created.player];
+    for (const nickname of ["B", "C", "D"]) players.push(manager.join(created.room.roomId, nickname).player);
+    for (const player of players) player.ready = true; created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of players) if (created.room.needsDealerRoll(player.playerId)) created.room.rollDice(player.playerId);
+    expect(created.room.dealerDetermination?.rolls.every((roll) => roll.dice1 >= 1 && roll.dice1 <= 6 && roll.dice2 >= 1 && roll.dice2 <= 6)).toBe(true);
+    expect(created.room.dealerDetermination?.finalOrder).toHaveLength(4); expect(new Set(created.room.dealerDetermination?.finalOrder).size).toBe(4);
+    created.room.destroy();
+  });
+  it("publishes wall position changes without exposing physical wall tiles", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("A"); const players = [created.player]; for (const nickname of ["B", "C", "D"]) players.push(manager.join(created.room.roomId, nickname).player); for (const player of players) player.ready = true; created.room.startGame(created.player.playerId); while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of players) if (created.room.needsDealerRoll(player.playerId)) created.room.rollDice(player.playerId); if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.rollDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
+    const room = created.room; const before = room.serializeForPlayer(players[0]!.playerId); const current = room.getPlayerBySeat(room.round!.currentSeat); const tile = current.hand.find((candidate) => candidate.type !== room.round!.jokerType)!;
+    room.discard(current.playerId, tile.tileId, "position-action-12345678", room.round!.version);
+    for (const playerId of room.round?.reactionWindow?.eligible.keys() ?? []) room.reaction(playerId, { actionId: `pass-${playerId}-12345678`, version: room.round!.version, kind: "pass" });
+    const after = room.serializeForPlayer(players[0]!.playerId); expect(["discard", "draw"].includes(String(after.room.round?.lastAction?.type))).toBe(true); expect(JSON.stringify(after)).not.toContain("firstDrawTileId\":\"9");
+    expect(before.room.round?.wall?.liveRemaining).toBe(69); expect(after.room.round?.wall?.liveRemaining).toBe(68);
+    room.destroy();
+  });
+  it("lets the server drive a bot through the wall-roll and first-turn APIs", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("Human"); while (created.room.playerCount() < 4) created.room.addBot(); for (const player of created.room.players) if (player) player.ready = true;
+    created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of created.room.players) if (player && created.room.needsDealerRoll(player.playerId)) created.room.botRollDealerDice(player.playerId);
+    if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.botRollWallDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
+    const dealer = created.room.getPlayerBySeat(created.room.round!.dealerSeat); expect(dealer.hand).toHaveLength(14); expect(created.room.legalActions(dealer.playerId).some((action) => action.kind === "discard")).toBe(true); created.room.destroy();
+  });
+  it("does not keep bot timers alive after a room is destroyed", () => {
+    vi.useFakeTimers(); const manager = new RoomManager(); const created = manager.createRoom("Human"); created.room.addBot(); created.room.destroy(); vi.advanceTimersByTime(5_000); expect(created.room.round?.phase).toBe("WAITING_FOR_PLAYERS"); vi.useRealTimers();
+  });
+  it("can drive one complete mixed human/bot hand without a deadlock", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("Human"); while (created.room.playerCount() < 4) created.room.addBot(); for (const player of created.room.players) if (player) player.ready = true; created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of created.room.players) if (player && created.room.needsDealerRoll(player.playerId)) created.room.botRollDealerDice(player.playerId);
+    if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.botRollWallDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
+    const strategy = new SimpleBotStrategy();
+    for (let step = 0; step < 250 && !["SETTLEMENT", "POT_SETTLEMENT"].includes(created.room.round?.phase ?? ""); step += 1) {
+      const round = created.room.round!;
+      if (round.phase === "WAITING_FOR_REACTIONS") {
+        for (const playerId of [...(round.reactionWindow?.eligible.keys() ?? [])]) created.room.reaction(playerId, { actionId: `pass-${step}-${playerId}`, version: created.room.round!.version, kind: "pass" });
+        continue;
+      }
+      if (round.phase !== "WAITING_FOR_DISCARD") break;
+      const player = created.room.getPlayerBySeat(round.currentSeat);
+      if (player.playerType === "BOT") created.room.botTakeTurn(player.playerId, strategy);
+      else { const tile = player.hand.find((candidate) => candidate.type !== round.jokerType); if (!tile) break; created.room.discard(player.playerId, tile.tileId, `human-${step}-12345678`, round.version); }
+    }
+    expect(["SETTLEMENT", "POT_SETTLEMENT"].includes(created.room.round?.phase ?? "")).toBe(true); created.room.destroy();
   });
 });

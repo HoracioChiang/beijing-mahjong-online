@@ -13,6 +13,8 @@ export interface Meld {
 export type GamePhase =
   | "WAITING_FOR_PLAYERS"
   | "READY"
+  | "DETERMINING_DEALER"
+  | "ROLLING_FOR_WALL"
   | "DEALING"
   | "WAITING_FOR_DISCARD"
   | "WAITING_FOR_REACTIONS"
@@ -22,7 +24,9 @@ export type GamePhase =
   | "DRAWING_KONG_REPLACEMENT"
   | "ROUND_END"
   | "SETTLEMENT"
-  | "NEXT_ROUND";
+  | "NEXT_ROUND"
+  | "POT_END"
+  | "POT_SETTLEMENT";
 
 export interface RuleConfig {
   basePoints: number;
@@ -43,6 +47,31 @@ export interface RuleConfig {
   scoring: Record<string, number>;
   enableVoiceChat: boolean;
   autoStart: boolean;
+  newPotScorePolicy: "RESET" | "CARRY";
+}
+
+export type RoundWind = "EAST" | "SOUTH" | "WEST" | "NORTH";
+
+export interface TableProgress {
+  potNumber: number;
+  roundWind: RoundWind;
+  dealerPosition: 0 | 1 | 2 | 3;
+  dealerSeat: 0 | 1 | 2 | 3;
+  continuationCount: number;
+  totalHandsPlayed: number;
+}
+
+export interface DealerRoll {
+  playerId: string;
+  dice1: number;
+  dice2: number;
+  total: number;
+  rerollRound: number;
+}
+
+export interface DealerDeterminationResult {
+  rolls: DealerRoll[];
+  finalOrder: string[];
 }
 
 export interface WinningMeld {

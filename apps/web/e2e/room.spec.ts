@@ -22,6 +22,18 @@ test("four browsers can create, join, ready, start, and refresh without losing i
     await expect(pages[0]!.getByRole("button", { name: "开始游戏" })).toBeVisible();
     await pages[0]!.getByRole("button", { name: "开始游戏" }).click();
     await expect(pages[0]!.locator(".mahjong-table")).toBeVisible();
+    for (const page of pages) {
+      const roll = page.getByRole("button", { name: /掷骰/ });
+      if (await roll.isVisible().catch(() => false)) await roll.click({ timeout: 1_000 }).catch(() => undefined);
+    }
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      for (const page of pages) {
+        const roll = page.getByRole("button", { name: /掷骰/ });
+        if (await roll.isVisible().catch(() => false)) await roll.click({ timeout: 1_000 }).catch(() => undefined);
+      }
+      if (await pages[0]!.locator(".own-hand .mahjong-tile").count() >= 13) break;
+      await pages[0]!.waitForTimeout(50);
+    }
     await pages[1]!.reload();
     await expect(pages[1]!.locator(".mahjong-table")).toBeVisible();
     const handCount = await pages[1]!.locator(".own-hand .mahjong-tile").count();
@@ -32,12 +44,12 @@ test("four browsers can create, join, ready, start, and refresh without losing i
         const settlement = page.locator(".settlement-card");
         if (await settlement.isVisible().catch(() => false)) { settled = true; break; }
         const hu = page.getByRole("button", { name: "胡", exact: true });
-        if (await hu.isVisible().catch(() => false) && await hu.isEnabled().catch(() => false)) { await hu.click(); continue; }
+        if (await hu.isVisible().catch(() => false) && await hu.isEnabled().catch(() => false)) { await hu.click({ timeout: 1_000 }).catch(() => undefined); continue; }
         const pass = page.getByRole("button", { name: "过", exact: true });
-        if (await pass.isVisible().catch(() => false) && await pass.isEnabled().catch(() => false)) { await pass.click(); continue; }
+        if (await pass.isVisible().catch(() => false) && await pass.isEnabled().catch(() => false)) { await pass.click({ timeout: 1_000 }).catch(() => undefined); continue; }
         const availableTiles = page.locator(".own-hand .mahjong-tile:not(:disabled)");
         const availableCount = await availableTiles.count();
-        if (availableCount > 0) await availableTiles.last().click();
+        if (availableCount > 0) await availableTiles.last().click({ timeout: 1_000 }).catch(() => undefined);
       }
       settled = settled || await pages[0]!.locator(".settlement-card").isVisible().catch(() => false);
       if (!settled) await pages[0]!.waitForTimeout(25);

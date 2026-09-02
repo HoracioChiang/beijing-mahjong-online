@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { GamePhase, Meld, RuleConfig, Tile, TileType } from "@beijing-mahjong/mahjong-core";
+import type { DealerDeterminationResult, GamePhase, Meld, RuleConfig, TableProgress, Tile, TileType, WallBreakInfo, WallPosition } from "@beijing-mahjong/mahjong-core";
 
 export const IdentitySchema = z.object({
   playerId: z.string().min(8).max(80),
@@ -19,7 +19,8 @@ export const RuleConfigSchema = z.object({
   floorRule: z.object({ enabled: z.boolean(), multiplier: z.number().int().min(1).max(10), stackMode: z.enum(["NEXT_ROUND_ONLY", "ACCUMULATE"]), resetPolicy: z.enum(["RESET_ON_WIN", "NEVER_RESET"]) }),
   scoring: z.record(z.number().int().positive()),
   enableVoiceChat: z.boolean(),
-  autoStart: z.boolean()
+  autoStart: z.boolean(),
+  newPotScorePolicy: z.enum(["RESET", "CARRY"])
 });
 
 export const CreateRoomSchema = z.object({ nickname: z.string().trim().min(1).max(20), rules: RuleConfigSchema.partial().optional() });
@@ -31,6 +32,9 @@ export const DiscardSchema = ActionIdSchema.extend({ tileId: z.string().min(3).m
 export const ReactionSchema = ActionIdSchema.extend({ kind: z.enum(["hu", "peng", "chi", "kong", "pass"]), tileTypes: z.array(z.number().int().min(0).max(33)).max(3).optional(), kongKind: z.enum(["concealed", "added"]).optional() });
 export const KongSchema = ActionIdSchema.extend({ tileType: z.number().int().min(0).max(33), kongKind: z.enum(["concealed", "added"]) });
 export const VoiceSignalSchema = z.object({ toPlayerId: z.string(), signal: z.unknown() });
+export const RollDiceSchema = ActionIdSchema;
+export const BotNameSchema = z.object({ nickname: z.string().trim().min(1).max(20).optional() });
+export const RemoveBotSchema = z.object({ playerId: z.string().min(8).max(100) });
 
 export type CreateRoomPayload = z.infer<typeof CreateRoomSchema>;
 export type JoinRoomPayload = z.infer<typeof JoinRoomSchema>;
@@ -52,11 +56,15 @@ export interface PublicPlayerState {
   wins: number;
   roundsPlayed: number;
   discardCount: number;
+  selfDrawWins: number;
+  maxSingleWin: number;
+  continuationWins: number;
   isDealer: boolean;
   isTurn: boolean;
   hasOpenedHand: boolean;
   isAutopilot: boolean;
   voiceEnabled: boolean;
+  playerType: "HUMAN" | "BOT";
 }
 
 export interface PublicReactionWindow {
@@ -79,6 +87,16 @@ export interface PublicRoundState {
   settlement: unknown | null;
   version: number;
   floorMultiplier: number;
+  progress: TableProgress | null;
+  dealerDetermination: DealerDeterminationResult | null;
+  wallBreak: WallBreakInfo | null;
+  wallRoll: { dice1: number; dice2: number; total: number } | null;
+  wall: {
+    sides: Array<{ sideIndex: number; seat: number; stacks: Array<{ stackIndex: number; bottomPresent: boolean; topPresent: boolean }> }>;
+    liveRemaining: number;
+    deadRemaining: number;
+    indicatorPosition: WallPosition | null;
+  } | null;
 }
 
 export interface PublicRoomState {
@@ -108,6 +126,10 @@ export type ClientToServerEvents = {
   "room:leave": (callback?: (payload: unknown) => void) => void;
   "player:ready": (ready: boolean) => void;
   "game:start": () => void;
+  "room:add-bot": (payload?: { nickname?: string }) => void;
+  "room:remove-bot": (payload: { playerId: string }) => void;
+  "game:add-bots-start": () => void;
+  "game:rollDice": (payload: z.infer<typeof RollDiceSchema>) => void;
   "game:discard": (payload: DiscardPayload) => void;
   "game:reaction": (payload: ReactionPayload) => void;
   "game:hu": (payload: z.infer<typeof ActionIdSchema>) => void;

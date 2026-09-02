@@ -11,7 +11,7 @@ packages/mahjong-core 纯 TypeScript 规则引擎，不依赖 React/Socket.IO
 packages/shared       Socket 事件类型、Zod payload schema、公开状态类型
 ```
 
-核心模块的公开入口为 `tiles.ts`、`rules.ts`、`hu.ts`、`ting.ts`、`meld.ts`、`scoring.ts`、`index.ts`。`tile.ts`、`score.ts`、`actions.ts` 是为 baseline 兼容保留的内部实现文件。
+核心模块的公开入口为 `tiles.ts`、`rules.ts`、`hu.ts`、`ting.ts`、`meld.ts`、`scoring.ts`、`index.ts`。`tile.ts`、`score.ts`、`actions.ts` 是为 baseline 兼容保留的内部实现文件。`wall.ts` 额外提供四面 17 墩实体牌墙、`WallBreakInfo`、`WallCursor` 和物理取牌函数。
 
 ## 本地开发
 
@@ -48,7 +48,7 @@ pnpm test
 pnpm simulate
 ```
 
-`pnpm simulate` 默认使用 deterministic seed 1–10000 模拟牌局，并在每个事件边界检查：136 张实体牌、每种牌四张、无重复 tileId、没有重复摸牌、phase 合法、无 deadlock 和积分零和。失败时会打印 seed；可以用 `SIMULATION_GAMES=100` 缩短本地调试。
+`pnpm simulate` 默认使用 deterministic seed 1–10000 模拟牌局，并在每个事件边界检查：136 张实体牌、每种牌四张、无重复 tileId、没有重复摸牌、phase 合法、无 deadlock 和积分零和。失败时会打印 seed；可以用 `SIMULATION_GAMES=100` 缩短本地调试。额外用 `SIMULATION_GAMES=0 SIMULATION_POTS=100 pnpm simulate` 验证 100 锅的东南西北推进及每锅的完整牌局模拟。
 
 Playwright 多浏览器房间 smoke test：
 
@@ -71,7 +71,10 @@ pnpm test:e2e
 - 反应窗口为 10 秒，出牌为 30 秒；超时自动托管并执行最小合法动作。
 - 优先级为 HU > GANG/PENG > CHI > PASS；同优先级按与出牌者顺时针距离，默认一炮一响。
 - 发牌后公开一个混坯子；正常牌墙和最后 7 墩/14 张 dead wall 分开，杠从 dead wall 补牌。
-- 庄家首局随机；胡牌/荒庄连庄，闲家胡牌下家坐庄。
+- 首锅开始先进入 `DETERMINING_DEALER` 打庄：服务器用 `crypto.randomInt(1, 7)` 为真人/机器人掷两颗骰子，同点只让同点组重掷，最高东、次高南、再次西、最低北。每局进入 `ROLLING_FOR_WALL` 后由当前庄家再次掷骰，决定四面牌墙的目标边、断口和第一张牌位置。
+- 牌墙不是抽象数组：四边各 17 墩、每墩上下两张；发牌/摸牌/杠后补牌都通过 `WallCursor` 消耗具体实体位置，客户端同步每个墩的剩余上下层。混坯子也从 dead wall 的实体位置翻出。
+- 庄家胡牌/荒庄连庄，闲家胡牌下家坐庄；四个连续庄位完成后推进东、南、西、北四圈，北圈第四庄结束进入 `POT_SETTLEMENT`。
+- 等待房间支持真人与机器人混合，机器人由服务端 `BotController` 驱动，使用同一个 discard/reaction/kong/hu 校验入口，不接收 socket，也没有浏览器手牌。
 - 荒庄后下一局默认上楼 ×2，设置可切换为累计或关闭。
 - 番型包含普通胡、素、门清、自摸、庄家、对对胡、大钓/全求人、一条龙、本混龙、捉五魁、七小对、豪华/双豪华/三豪华七小对、清一色、杠上开花、杠上炮、抢杠胡、海底、天胡、地胡、混杠。
 - 默认倍数集中在 `BeijingDefaultRules.scoring`，本混龙不重复算一条龙，豪华七对不重复算普通七对，ScoreCalculator 会比较所有合法标准拆法后取最高分。
@@ -79,7 +82,7 @@ pnpm test:e2e
 
 ## 房间与断线
 
-房间 ID 为六位数字。浏览器 localStorage 保存 `playerId`、`reconnectToken`、`roomId`、`nickname`。Socket ID 不是玩家身份；刷新或网络切换会用 token 恢复原座位、手牌、积分、meld、弃牌和当前牌局。断线座位保留 5 分钟，所有玩家主动退出立即销毁房间，所有连接断开 5 分钟后也会销毁。
+房间 ID 为六位数字。等待房间中房主可以点击“添加机器人”或“添加机器人并开始”，支持 1 真人 + 3 Bot 到 4 真人。浏览器 localStorage 保存 `playerId`、`reconnectToken`、`roomId`、`nickname`。Socket ID 不是玩家身份；刷新或网络切换会用 token 恢复原座位、手牌、积分、meld、弃牌和当前牌局。断线座位保留 5 分钟；没有真人连接/真人主动退出后，包含 Bot 的临时房间也会清理。
 
 `serializeForPlayer(room, playerId)` 的逻辑在 `GameRoom.serializeForPlayer`：只有当前玩家自己的 hand 被序列化，其他玩家仅有 `handCount`；结算阶段才公开全部手牌。暗牌泄露测试会直接检查 JSON payload。
 

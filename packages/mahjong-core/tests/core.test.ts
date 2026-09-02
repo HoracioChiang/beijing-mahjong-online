@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BeijingDefaultRules, analyzeHu, calculateScore, calculateTing, canAddKong, canAnKong, canMingKong, canPeng, chiCombinations, createWall, nextJokerType, seededRandom, tileLabel, tileNotation, tileType
+  BeijingDefaultRules, advanceTableProgress, analyzeHu, breakMahjongWall, calculateScore, calculateTing, canAddKong, canAnKong, canMingKong, canPeng, chiCombinations, createMahjongWall, createWall, deadWallRemaining, drawNextTile, drawReplacementTile, nextJokerType, revealJokerIndicator, seededRandom, serializeWall, tileLabel, tileNotation, tileType, wallRemaining
 } from "../src/index.js";
 
 const t = (...types: number[]) => types.map(tileType);
@@ -114,6 +114,60 @@ describe("Meld legality", () => {
   it("does not allow concealed joker kong by substitution", () => expect(canAnKong(t(4, 4, 4, 31), 31 as never)).toEqual([]));
   it("checks added kong from an existing peng", () => expect(canAddKong(t(4), [meld("peng", 4)], null as never)).toEqual([4]));
   it("does not use joker as added kong", () => expect(canAddKong(t(31), [meld("peng", 31)], 31 as never)).toEqual([]));
+});
+
+describe("Physical four-sided wall", () => {
+  it("has four sides, 17 stacks per side, and two entities per stack", () => {
+    const wall = createMahjongWall(seededRandom(901));
+    expect(wall.sides).toHaveLength(4);
+    expect(wall.sides.every((side) => side.stacks.length === 17)).toBe(true);
+    expect(wall.sides.flatMap((side) => side.stacks).flatMap((stack) => [stack.bottomTile, stack.topTile]).filter(Boolean)).toHaveLength(136);
+  });
+  it.each(Array.from({ length: 12 }, (_, total) => total + 1))("maps %i points to the correct dealer-relative wall", (total) => {
+    const wall = createMahjongWall(seededRandom(1000 + total));
+    const info = breakMahjongWall(wall, 1, Math.ceil(total / 2), Math.floor(total / 2) || 1, 7);
+    expect(info.targetSeat).toBe((1 + (info.total - 1) % 4) % 4);
+    expect(info.breakStackIndex).toBe(info.total % 17);
+    expect(info.firstDrawPosition).toEqual({ sideIndex: info.targetSeat, stackIndex: info.breakStackIndex, layer: "TOP" });
+  });
+  it("removes indicator and then physical live/dead draws", () => {
+    const wall = createMahjongWall(seededRandom(902)); breakMahjongWall(wall, 0, 3, 4, 7);
+    const indicator = revealJokerIndicator(wall); expect(indicator).not.toBeNull(); expect(deadWallRemaining(wall)).toBe(13);
+    const first = drawNextTile(wall); expect(first?.position).toEqual(wall.breakInfo?.firstDrawPosition); expect(wallRemaining(wall)).toBe(121);
+    const replacement = drawReplacementTile(wall); expect(replacement).not.toBeNull(); expect(deadWallRemaining(wall)).toBe(12);
+    const snapshot = serializeWall(wall); expect(snapshot.liveRemaining).toBe(121); expect(snapshot.deadRemaining).toBe(12);
+  });
+  it("never repeats an entity position while drawing the entire live wall", () => {
+    const wall = createMahjongWall(seededRandom(903)); breakMahjongWall(wall, 2, 6, 6, 7); revealJokerIndicator(wall);
+    const positions = new Set<string>(); let count = 0; let drawn = drawNextTile(wall);
+    while (drawn) { const key = JSON.stringify(drawn.position); expect(positions.has(key)).toBe(false); positions.add(key); count += 1; drawn = drawNextTile(wall); }
+    expect(count).toBe(122); expect(wallRemaining(wall)).toBe(0);
+  });
+});
+
+describe("Four-wind pot progression", () => {
+  const initial = { potNumber: 1, roundWind: "EAST" as const, dealerPosition: 0 as const, dealerSeat: 0 as const, continuationCount: 0, totalHandsPlayed: 0 };
+  it("keeps the dealer and wind during a dealer win", () => {
+    const result = advanceTableProgress(initial, { dealerWon: true, draw: false, winnerSeat: 0 });
+    expect(result.potEnded).toBe(false); expect(result.progress.dealerPosition).toBe(0); expect(result.progress.dealerSeat).toBe(0); expect(result.progress.roundWind).toBe("EAST"); expect(result.progress.continuationCount).toBe(1);
+  });
+  it("advances dealer position only for a non-dealer win", () => {
+    const result = advanceTableProgress(initial, { dealerWon: false, draw: false, winnerSeat: 1 });
+    expect(result.progress.dealerPosition).toBe(1); expect(result.progress.dealerSeat).toBe(1); expect(result.progress.roundWind).toBe("EAST"); expect(result.progress.continuationCount).toBe(0);
+  });
+  it.each([["EAST", "SOUTH"], ["SOUTH", "WEST"], ["WEST", "NORTH"]] as const)("moves from %s to %s after the fourth dealer", (from, to) => {
+    const result = advanceTableProgress({ ...initial, roundWind: from, dealerPosition: 3, dealerSeat: 3 }, { dealerWon: false, draw: false, winnerSeat: 0 });
+    expect(result.progress.roundWind).toBe(to); expect(result.progress.dealerPosition).toBe(0); expect(result.progress.dealerSeat).toBe(0);
+  });
+  it("ends after the fourth non-dealer finish in north wind", () => {
+    const result = advanceTableProgress({ ...initial, roundWind: "NORTH", dealerPosition: 3, dealerSeat: 3 }, { dealerWon: false, draw: false, winnerSeat: 0 });
+    expect(result.potEnded).toBe(true);
+  });
+  it("does not finish a pot after 100 dealer continuations", () => {
+    let progress = initial;
+    for (let index = 0; index < 100; index += 1) progress = advanceTableProgress(progress, { dealerWon: true, draw: false, winnerSeat: 0 }).progress;
+    expect(progress.dealerPosition).toBe(0); expect(progress.roundWind).toBe("EAST"); expect(progress.totalHandsPlayed).toBe(100);
+  });
 });
 
 describe("ScoreCalculator", () => {

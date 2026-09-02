@@ -4,7 +4,7 @@ import http from "node:http";
 import express, { type Application } from "express";
 import cors from "cors";
 import { Server } from "socket.io";
-import { CreateRoomSchema, JoinRoomSchema, DiscardSchema, ReactionSchema, KongSchema, VoiceSignalSchema, type ClientToServerEvents, type ServerToClientEvents } from "@beijing-mahjong/shared";
+import { BotNameSchema, CreateRoomSchema, JoinRoomSchema, DiscardSchema, KongSchema, ReactionSchema, RemoveBotSchema, RollDiceSchema, VoiceSignalSchema, type ClientToServerEvents, type ServerToClientEvents } from "@beijing-mahjong/shared";
 import { RoomManager } from "./room-manager.js";
 import type { GameRoom } from "./room.js";
 
@@ -44,6 +44,10 @@ io.on("connection", (socket) => {
   socket.on("room:leave", (callback) => { const item = current(); if (item) { manager.leave(item.roomId, item.playerId); connections.delete(socket.id); } callback?.({ ok: true }); socket.disconnect(true); });
   socket.on("player:ready", (ready) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); manager.get(item.roomId).setReady(item.playerId, Boolean(ready)); } catch (error) { fail(socket, error); } });
   socket.on("game:start", () => { try { const item = current(); if (!item) throw new Error("请先加入房间"); manager.get(item.roomId).startGame(item.playerId); } catch (error) { fail(socket, error); } });
+  socket.on("room:add-bot", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = BotNameSchema.parse(raw ?? {}); manager.get(item.roomId).addBot(payload.nickname); } catch (error) { fail(socket, error); } });
+  socket.on("room:remove-bot", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = RemoveBotSchema.parse(raw); manager.get(item.roomId).removeBot(item.playerId, payload.playerId); } catch (error) { fail(socket, error); } });
+  socket.on("game:add-bots-start", () => { try { const item = current(); if (!item) throw new Error("请先加入房间"); manager.get(item.roomId).addBotsAndStart(item.playerId); } catch (error) { fail(socket, error); } });
+  socket.on("game:rollDice", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = RollDiceSchema.parse(raw); const room = manager.get(item.roomId); room.assertVersion(payload.version); room.rollDice(item.playerId); } catch (error) { fail(socket, error); } });
   socket.on("game:discard", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = DiscardSchema.parse(raw); manager.get(item.roomId).discard(item.playerId, payload.tileId, payload.actionId, payload.version); } catch (error) { fail(socket, error); } });
   socket.on("game:reaction", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = ReactionSchema.parse(raw); manager.get(item.roomId).reaction(item.playerId, payload); } catch (error) { fail(socket, error); } });
   socket.on("game:hu", (raw) => { try { const item = current(); if (!item) throw new Error("请先加入房间"); const payload = DiscardSchema.pick({ actionId: true, version: true }).parse(raw); manager.get(item.roomId).hu(item.playerId, payload.actionId, payload.version); } catch (error) { fail(socket, error); } });
