@@ -28,6 +28,7 @@ function GameRoomView({ state, self, legalActions, ting }: { state: PublicRoomSt
   const [showBoard, setShowBoard] = useState(false); const [showHistory, setShowHistory] = useState(false); const [sound, setSound] = useState(true); const [voiceOn, setVoiceOn] = useState(false); const voiceRef = useRef<VoiceManager | null>(null);
   const players = state.players; const peerIds = players.filter((player) => player.connected).map((player) => player.playerId);
   useEffect(() => { if (!event) return; if (["draw", "discard", "chi", "peng", "kong", "win"].includes(event.type)) playSound(event.type === "win" ? "hu" : event.type); if (event.type === "deal") speak("发牌"); }, [event]);
+  useEffect(() => { if (event?.type !== "DEAL_ANIMATION") return; document.body.dataset.dealing = "true"; const timer = window.setTimeout(() => { delete document.body.dataset.dealing; }, 1400); return () => window.clearTimeout(timer); }, [event]);
   useEffect(() => () => voiceRef.current?.destroy(), []);
   const toggleVoice = async () => { if (!self) return; if (voiceOn) { voiceRef.current?.stop(); voiceRef.current = null; setVoiceOn(false); setVoice(false); return; } const manager = new VoiceManager(useGameStore.getState().socket, self.playerId, setVoiceError); voiceRef.current = manager; if (await manager.start(peerIds)) { setVoiceOn(true); setVoice(true); } };
   const relative = (player: PublicPlayerState) => { const offset = (player.seat - (self?.seat ?? 0) + 4) % 4; return ["self-seat", "left-seat", "top-seat", "right-seat"][offset] ?? "self-seat"; };
