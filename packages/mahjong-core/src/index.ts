@@ -7,3 +7,4 @@ export * from "./scoring.js";
 export * from "./meld.js";
 export * from "./rules.js";
 export * from "./progress.js";
+export * from "./patterns/index.js";

@@ -1,9 +1,9 @@
 import { BeijingDefaultRules } from "./rules/beijing-default.js";
 import type { RuleConfig, ScoreBreakdownItem, ScoreContext, ScoreResult } from "./types.js";
-import { evaluateBasicPatterns } from "./patterns/basic.js";
+import { evaluatePatterns } from "./patterns/basic.js";
 
 const selectedPatterns = (context: ScoreContext, rules: RuleConfig, decomposition?: import("./types.js").WinningDecomposition): ScoreBreakdownItem[] => {
-  const matches = evaluateBasicPatterns(Object.assign({}, context, { __scoring: rules.scoring }), decomposition);
+  const matches = evaluatePatterns({ ...context, scoring: rules.scoring }, decomposition);
   const has = (key: string) => matches.some((pattern) => pattern.key === key);
   let filtered = matches;
   if (has("BENHUNLONG")) filtered = filtered.filter((pattern) => pattern.key !== "YITIAOLONG");

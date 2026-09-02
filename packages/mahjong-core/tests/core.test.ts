@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  BeijingDefaultRules, advanceTableProgress, analyzeHu, breakMahjongWall, calculateScore, calculateTing, canAddKong, canAnKong, canMingKong, canPeng, chiCombinations, createMahjongWall, createWall, deadWallRemaining, drawNextTile, drawReplacementTile, nextJokerType, revealJokerIndicator, seededRandom, serializeWall, tileLabel, tileNotation, tileType, wallRemaining
+  BeijingDefaultRules, advanceTableProgress, analyzeHu, breakMahjongWall, calculateScore, calculateTing, canAddKong, canAnKong, canMingKong, canPeng, chiCombinations, createMahjongWall, createWall, deadWallRemaining, drawNextTile, drawReplacementTile, evaluatePatterns, nextJokerType, revealJokerIndicator, seededRandom, serializeWall, tileLabel, tileNotation, tileType, wallRemaining
 } from "../src/index.js";
 
 const t = (...types: number[]) => types.map(tileType);
@@ -183,4 +183,17 @@ describe("ScoreCalculator", () => {
   it("adds floor multiplier", () => expect(scoreFor([0, 1, 2, 9, 10, 11, 18, 19, 20, 3, 4, 5, 27, 27], { floorMultiplier: 2 }).breakdown.map((item) => item.key)).toContain("FLOOR"));
   it("recognizes gang shang kai hua", () => expect(scoreFor([0, 1, 2, 9, 10, 11, 18, 19, 20, 3, 4, 5, 27, 27], { isGangShangKaiHua: true }).breakdown.map((item) => item.key)).toContain("GANGSHANGKAIHUA"));
   it("recognizes qiang gang", () => expect(scoreFor([0, 1, 2, 9, 10, 11, 18, 19, 20, 3, 4, 5, 27, 27], { isQiangGang: true, isSelfDraw: false, discarderId: "p1" }).breakdown.map((item) => item.key)).toContain("QIANGGANG"));
+  it("uses the selected decomposition and injected rule table", () => {
+    const openPeng = { id: "open-peng", kind: "peng" as const, tiles: [9, 9, 9].map((type, index) => ({ tileId: `open-${index}`, type: tileType(type) })) };
+    const concealed = t(0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0);
+    const winning = analyzeHu({ concealed, openMelds: [openPeng], jokerType: null });
+    expect(winning.isHu).toBe(true);
+    expect(evaluatePatterns({ winnerId: "p0", winnerName: "P0", allPlayers: players, winnerSeat: 0, dealerSeat: 0, concealed, openMelds: [openPeng], winning, jokerType: null, isSelfDraw: true, scoring: { ...BeijingDefaultRules.scoring, MENQING: 3 } }).some((match) => match.key === "QINGYISE")).toBe(false);
+    const result = calculateScore({ winnerId: "p0", winnerName: "P0", allPlayers: players, winnerSeat: 0, dealerSeat: 0, concealed, openMelds: [openPeng], winning, jokerType: null, isSelfDraw: true }, { ...BeijingDefaultRules, scoring: { ...BeijingDefaultRules.scoring, MENQING: 3 } });
+    expect(result.breakdown.find((item) => item.key === "MENQING")).toBeUndefined();
+    const closedHand = t(0, 1, 2, 9, 10, 11, 18, 19, 20, 3, 4, 5, 27, 27);
+    const closedWinning = analyzeHu({ concealed: closedHand, jokerType: null });
+    const matches = evaluatePatterns({ winnerId: "p0", winnerName: "P0", allPlayers: players, winnerSeat: 0, dealerSeat: 0, concealed: closedHand, openMelds: [], winning: closedWinning, jokerType: null, isSelfDraw: true, scoring: { ...BeijingDefaultRules.scoring, MENQING: 3 } });
+    expect(matches.find((match) => match.key === "MENQING")?.multiplier).toBe(3);
+  });
 });

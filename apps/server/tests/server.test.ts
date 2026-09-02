@@ -4,6 +4,7 @@ import { GameRoom } from "../src/room.js";
 import { RoomManager } from "../src/room-manager.js";
 import { SimpleBotStrategy } from "../src/bot-strategy.js";
 import { vi } from "vitest";
+import { BeijingDefaultRules } from "@beijing-mahjong/mahjong-core";
 
 const payload = (kind: "hu" | "kong" | "peng" | "chi" | "pass") => ({ actionId: `action-${kind}-12345678`, version: 1, kind });
 
@@ -182,5 +183,16 @@ describe("server-controlled bots and dice", () => {
       else { const tile = player.hand.find((candidate) => candidate.type !== round.jokerType); if (!tile) break; created.room.discard(player.playerId, tile.tileId, `human-${step}-12345678`, round.version); }
     }
     expect(["SETTLEMENT", "POT_SETTLEMENT"].includes(created.room.round?.phase ?? "")).toBe(true); created.room.destroy();
+  });
+  it("honors floor stack mode instead of silently accumulating every draw", () => {
+    const manager = new RoomManager(); const created = manager.createRoom("A", { floorRule: { ...BeijingDefaultRules.floorRule, stackMode: "NEXT_ROUND_ONLY" } }); const players = [created.player];
+    for (const nickname of ["B", "C", "D"]) players.push(manager.join(created.room.roomId, nickname).player);
+    for (const player of players) player.ready = true; created.room.startGame(created.player.playerId);
+    while (created.room.round?.phase === "DETERMINING_DEALER") for (const player of players) if (created.room.needsDealerRoll(player.playerId)) created.room.rollDice(player.playerId);
+    if (created.room.round?.phase === "ROLLING_FOR_WALL") created.room.rollDice(created.room.getPlayerBySeat(created.room.round.dealerSeat).playerId);
+    const finishDraw = (created.room as unknown as { finishDrawRound: () => void }).finishDrawRound.bind(created.room);
+    finishDraw(); expect(created.room.round?.phase).toBe("SETTLEMENT");
+    for (const player of players) player.ready = true; created.room.startGame(created.player.playerId); expect(created.room.round?.floorMultiplier).toBe(2);
+    finishDraw(); for (const player of players) player.ready = true; created.room.startGame(created.player.playerId); expect(created.room.round?.floorMultiplier).toBe(2); created.room.destroy();
   });
 });

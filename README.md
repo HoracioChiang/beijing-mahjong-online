@@ -11,6 +11,8 @@ packages/mahjong-core 纯 TypeScript 规则引擎，不依赖 React/Socket.IO
 packages/shared       Socket 事件类型、Zod payload schema、公开状态类型
 ```
 
+本次参考的开源麻将项目、许可证核对结果以及“参考而不复制”的模块映射见 [`docs/OPEN_SOURCE_ARCHITECTURE_AUDIT.md`](docs/OPEN_SOURCE_ARCHITECTURE_AUDIT.md)。
+
 核心模块的公开入口为 `tiles.ts`、`rules.ts`、`hu.ts`、`ting.ts`、`meld.ts`、`scoring.ts`、`index.ts`。`tile.ts`、`score.ts`、`actions.ts` 是为 baseline 兼容保留的内部实现文件。`wall.ts` 额外提供四面 17 墩实体牌墙、`WallBreakInfo`、`WallCursor` 和物理取牌函数。
 
 ## 本地开发
