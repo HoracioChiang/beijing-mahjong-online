@@ -26,6 +26,23 @@ test("four browsers can create, join, ready, start, and refresh without losing i
     await expect(pages[1]!.locator(".mahjong-table")).toBeVisible();
     const handCount = await pages[1]!.locator(".own-hand .mahjong-tile").count();
     expect([13, 14]).toContain(handCount);
+    let settled = false;
+    for (let turn = 0; turn < 180 && !settled; turn += 1) {
+      for (const page of pages) {
+        const settlement = page.locator(".settlement-card");
+        if (await settlement.isVisible().catch(() => false)) { settled = true; break; }
+        const hu = page.getByRole("button", { name: "胡", exact: true });
+        if (await hu.isVisible().catch(() => false) && await hu.isEnabled().catch(() => false)) { await hu.click(); continue; }
+        const pass = page.getByRole("button", { name: "过", exact: true });
+        if (await pass.isVisible().catch(() => false) && await pass.isEnabled().catch(() => false)) { await pass.click(); continue; }
+        const availableTiles = page.locator(".own-hand .mahjong-tile:not(:disabled)");
+        const availableCount = await availableTiles.count();
+        if (availableCount > 0) await availableTiles.last().click();
+      }
+      settled = settled || await pages[0]!.locator(".settlement-card").isVisible().catch(() => false);
+      if (!settled) await pages[0]!.waitForTimeout(25);
+    }
+    await expect(pages[0]!.locator(".settlement-card")).toBeVisible({ timeout: 5_000 });
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }
