@@ -59,6 +59,7 @@ export interface RoundRuntime {
 }
 
 const id = (prefix: string) => `${prefix}_${randomBytes(12).toString("hex")}`;
+const serverRandom = () => randomInt(0, 0x1_0000_0000) / 0x1_0000_0000;
 const cloneTile = (tile: Tile): Tile => ({ ...tile });
 const seatDistance = (from: number, to: number) => (to - from + 4) % 4;
 const sortHand = (hand: Tile[]) => hand.sort((a, b) => a.type - b.type || a.tileId.localeCompare(b.tileId));
@@ -146,7 +147,7 @@ export class GameRoom extends EventEmitter {
   }
 
   private beginRound(dealerSeat: number): void {
-    this.clearTimer(); const progress = this.tableProgress; if (!progress) throw new Error("庄家尚未确定"); const wall = createMahjongWall(); const floorMultiplier = this.rules.floorRule.enabled ? Math.max(1, this.nextFloorMultiplier) : 1;
+    this.clearTimer(); const progress = this.tableProgress; if (!progress) throw new Error("庄家尚未确定"); const wall = createMahjongWall(serverRandom); const floorMultiplier = this.rules.floorRule.enabled ? Math.max(1, this.nextFloorMultiplier) : 1;
     for (const player of this.players) if (player) { player.hand = []; player.melds = []; player.discards = []; player.roundsPlayed += 1; player.hasOpenedHand = false; player.hasChi = false; player.hasPeng = false; player.hasMingGang = false; player.isAutopilot = false; player.ready = false; }
     const currentHandNumber = progress.totalHandsPlayed + 1;
     this.round = { handNumber: currentHandNumber, dealerSeat, phase: "ROLLING_FOR_WALL", currentSeat: dealerSeat, wall, jokerIndicator: null, jokerType: null, wallRoll: null, wallBreak: null, lastAction: { type: "round-created", handNumber: currentHandNumber }, reactionWindow: null, settlement: null, version: (this.round?.version ?? 0) + 1, lastDrawWasReplacement: false, floorMultiplier, dealerRuntime: null, outcome: null, liveWall: [], deadWall: [] };
