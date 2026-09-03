@@ -83,6 +83,7 @@ export interface PublicRoundState {
   jokerIndicator: Tile | null;
   jokerType: TileType | null;
   lastAction: Record<string, unknown> | null;
+  latestDiscard: { playerId: string; tileId: string } | null;
   reactionWindow: PublicReactionWindow | null;
   settlement: unknown | null;
   version: number;

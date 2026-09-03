@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.setTimeout(120_000);
+
 test("four browsers can create, join, ready, start, and refresh without losing identity", async ({ browser, baseURL }) => {
   const contexts = await Promise.all([0, 1, 2, 3].map(() => browser.newContext()));
   const pages = await Promise.all(contexts.map((context) => context.newPage()));
@@ -39,6 +41,7 @@ test("four browsers can create, join, ready, start, and refresh without losing i
     const handCount = await pages[1]!.locator(".own-hand .mahjong-tile").count();
     expect([13, 14]).toContain(handCount);
     let settled = false;
+    let latestDiscardSeenByEveryone = false;
     for (let turn = 0; turn < 180 && !settled; turn += 1) {
       for (const page of pages) {
         const settlement = page.locator(".settlement-card");
@@ -51,9 +54,13 @@ test("four browsers can create, join, ready, start, and refresh without losing i
         const availableCount = await availableTiles.count();
         if (availableCount > 0) await availableTiles.last().click({ timeout: 1_000 }).catch(() => undefined);
       }
+      if (!latestDiscardSeenByEveryone) {
+        latestDiscardSeenByEveryone = (await Promise.all(pages.map(async (page) => await page.locator(".latest-discard-marker").count() === 1))).every(Boolean);
+      }
       settled = settled || await pages[0]!.locator(".settlement-card").isVisible().catch(() => false);
       if (!settled) await pages[0]!.waitForTimeout(25);
     }
+    expect(latestDiscardSeenByEveryone).toBe(true);
     await expect(pages[0]!.locator(".settlement-card")).toBeVisible({ timeout: 5_000 });
     for (const page of pages) await page.getByRole("button", { name: "准备下一局", exact: true }).click();
     await expect(pages[0]!.getByText("庄家开牌", { exact: true })).toBeVisible({ timeout: 5_000 });

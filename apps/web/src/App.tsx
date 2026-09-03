@@ -14,6 +14,106 @@ const roundLabel = (round: PublicRoundState) => `${({ EAST: "东", SOUTH: "南",
 type SeatPosition = "self-seat" | "left-seat" | "top-seat" | "right-seat";
 type TileSize = "hand" | "discard" | "meld" | "wall" | "indicator";
 
+type FacePoint = readonly [x: number, y: number];
+
+const FACE_LAYOUTS: Record<number, readonly FacePoint[]> = {
+  1: [[30, 41]],
+  2: [[30, 20], [30, 62]],
+  3: [[17, 20], [30, 41], [43, 62]],
+  4: [[18, 21], [42, 21], [18, 61], [42, 61]],
+  5: [[18, 20], [42, 20], [30, 41], [18, 62], [42, 62]],
+  6: [[18, 17], [42, 17], [18, 41], [42, 41], [18, 65], [42, 65]],
+  7: [[15, 16], [30, 16], [45, 16], [19, 39], [41, 39], [19, 63], [41, 63]],
+  8: [[18, 13], [42, 13], [18, 32], [42, 32], [18, 51], [42, 51], [18, 70], [42, 70]],
+  9: [[15, 16], [30, 16], [45, 16], [15, 41], [30, 41], [45, 41], [15, 66], [30, 66], [45, 66]]
+};
+
+const FACE_COLORS = { red: "#d4262b", green: "#16934d", blue: "#1559a6" } as const;
+
+function circleColor(rank: number, index: number): keyof typeof FACE_COLORS {
+  if (rank === 2) return index === 0 ? "blue" : "green";
+  if (rank === 3) return (["blue", "red", "green"] as const)[index] ?? "green";
+  if (rank === 5 && index === 2) return "red";
+  if (rank === 6) return index < 2 ? "red" : index < 4 ? "blue" : "green";
+  if (rank === 7) return index < 3 ? "red" : index % 2 ? "green" : "blue";
+  if (rank === 8) return index % 2 ? "green" : "blue";
+  if (rank === 9) return index < 3 ? "blue" : index < 6 ? "red" : "green";
+  return index % 2 ? "green" : "blue";
+}
+
+function CircleFace({ rank }: { rank: number }) {
+  if (rank === 1) return <svg className="tile-face-svg circle-face" viewBox="0 0 60 82" aria-hidden="true">
+    <circle cx="30" cy="41" r="15" fill="none" stroke={FACE_COLORS.green} strokeWidth="2.4" />
+    <circle cx="30" cy="41" r="11" fill="none" stroke={FACE_COLORS.blue} strokeWidth="3" strokeDasharray="2 2" />
+    <circle cx="30" cy="41" r="7" fill="none" stroke={FACE_COLORS.red} strokeWidth="2.5" />
+    <circle cx="30" cy="41" r="3" fill={FACE_COLORS.green} />
+    {Array.from({ length: 12 }, (_, index) => <path key={index} d="M30 24 L30 28" stroke={index % 3 === 0 ? FACE_COLORS.red : FACE_COLORS.green} strokeWidth="1.7" transform={`rotate(${index * 30} 30 41)`} />)}
+  </svg>;
+  return <svg className="tile-face-svg circle-face" viewBox="0 0 60 82" aria-hidden="true">
+    {FACE_LAYOUTS[rank]?.map(([x, y], index) => {
+      const color = FACE_COLORS[circleColor(rank, index)];
+      return <g key={`${x}-${y}`}>
+        <circle cx={x} cy={y} r="6.1" fill="#fffdf4" stroke={color} strokeWidth="2.15" />
+        <circle cx={x} cy={y} r="3.15" fill="none" stroke={color} strokeWidth="1.3" />
+        <circle cx={x} cy={y} r="1.25" fill={color} />
+      </g>;
+    })}
+  </svg>;
+}
+
+function BambooStick({ x, y, color, rotate = 0 }: { x: number; y: number; color: string; rotate?: number }) {
+  return <g transform={`translate(${x} ${y}) rotate(${rotate})`}>
+    <path d="M-3.2 -8.7 Q0 -11 3.2 -8.7 L2.5 -1.1 Q0 .9 -2.5 -1.1 Z" fill={color} />
+    <path d="M-2.5 1.1 Q0 -.8 2.5 1.1 L3.2 8.7 Q0 11 -3.2 8.7 Z" fill={color} />
+    <path d="M-2.8 0 H2.8" stroke="#f9f2d7" strokeWidth="1.2" />
+    <path d="M0 -7 V-2 M0 2 V7" stroke="rgba(255,255,255,.5)" strokeWidth=".7" />
+  </g>;
+}
+
+function BambooFace({ rank }: { rank: number }) {
+  if (rank === 1) return <svg className="tile-face-svg bamboo-face bamboo-bird" viewBox="0 0 60 82" aria-hidden="true">
+    <path d="M31 60 C18 51 15 37 22 22 C25 31 28 35 33 38 C30 28 33 18 41 12 C40 26 45 31 49 35 C44 37 40 43 38 54 Z" fill="#168d49" />
+    <path d="M29 57 C24 45 25 34 34 26 C33 38 38 43 43 47 C37 49 34 54 33 62 Z" fill="#174da0" />
+    <path d="M25 24 C17 24 13 20 12 15 C18 16 23 14 27 10 C29 15 29 20 25 24 Z" fill="#d4262b" />
+    <circle cx="24" cy="17" r="1.7" fill="#fff" /><circle cx="24" cy="17" r=".8" fill="#142f37" />
+    <path d="M14 15 L8 18 L14 20" fill="#e4b22e" />
+    <path d="M32 59 L25 70 M34 59 L39 70" stroke="#d4262b" strokeWidth="2" strokeLinecap="round" />
+    <path d="M24 70 H19 M39 70 H44" stroke="#1559a6" strokeWidth="2" strokeLinecap="round" />
+  </svg>;
+  return <svg className="tile-face-svg bamboo-face" viewBox="0 0 60 82" aria-hidden="true">
+    {FACE_LAYOUTS[rank]?.map(([x, y], index) => <BambooStick key={`${x}-${y}`} x={x} y={y} rotate={index % 2 ? 3 : -3} color={rank === 5 && index === 2 ? FACE_COLORS.red : rank >= 7 && index % 3 === 1 ? FACE_COLORS.blue : FACE_COLORS.green} />)}
+  </svg>;
+}
+
+function CharacterFace({ rank }: { rank: number }) {
+  const numeral = ["一", "二", "三", "四", "五", "六", "七", "八", "九"][rank - 1] ?? String(rank);
+  return <svg className="tile-face-svg character-face" viewBox="0 0 60 82" aria-hidden="true">
+    <text x="30" y="36" textAnchor="middle" className="character-number">{numeral}</text>
+    <text x="30" y="68" textAnchor="middle" className="character-wan">萬</text>
+  </svg>;
+}
+
+function HonorFace({ index }: { index: number }) {
+  if (index === 6) return <svg className="tile-face-svg honor-face" viewBox="0 0 60 82" aria-hidden="true">
+    <rect x="16" y="12" width="28" height="57" rx="2" fill="none" stroke={FACE_COLORS.blue} strokeWidth="2.6" />
+    <rect x="20" y="16" width="20" height="49" rx="1" fill="none" stroke="#85add0" strokeWidth="1" />
+  </svg>;
+  const glyph = ["東", "南", "西", "北", "中", "發"][index] ?? "牌";
+  const color = index === 4 ? FACE_COLORS.red : index === 5 ? FACE_COLORS.green : FACE_COLORS.blue;
+  return <svg className="tile-face-svg honor-face" viewBox="0 0 60 82" aria-hidden="true">
+    <text x="30" y="57" textAnchor="middle" className="honor-character" fill={color}>{glyph}</text>
+  </svg>;
+}
+
+function TileFace({ type }: { type: TileType }) {
+  const rank = tileRank(type);
+  const suit = tileSuit(type);
+  if (rank === null) return <HonorFace index={type - 27} />;
+  if (suit === "circles") return <CircleFace rank={rank} />;
+  if (suit === "bamboos") return <BambooFace rank={rank} />;
+  return <CharacterFace rank={rank} />;
+}
+
 function App() {
   const state = useGameStore((store) => store.state);
   const identity = useGameStore((store) => store.identity);
@@ -180,12 +280,9 @@ function GameRoomView({ state, self, legalActions, ting }: { state: PublicRoomSt
 
 function MahjongTile({ tile, jokerType, disabled, onClick, size = "hand", extraClass = "", dealIndex }: { tile: Tile; jokerType: TileType | null; disabled?: boolean; onClick?: () => void; size?: TileSize; extraClass?: string; dealIndex?: number }) {
   const suit = tileSuit(tile.type);
-  const rank = tileRank(tile.type);
   const style = dealIndex === undefined ? undefined : { "--deal-index": dealIndex } as CSSProperties;
   return <button className={`mahjong-tile tile-${size} tile-${suit} ${disabled ? "tile-disabled" : ""} ${extraClass}`} style={style} disabled={disabled} onClick={onClick} title={tileLabel(tile.type)} aria-label={tileLabel(tile.type)}>
-    <span className="tile-inner">
-      {rank === null ? <span className="honor-glyph">{["東", "南", "西", "北", "中", "發", "白"][tile.type - 27] ?? "牌"}</span> : <><span className="tile-rank">{rank}</span><span className="suit-glyph">{suit === "characters" ? "萬" : suit === "circles" ? "筒" : "索"}</span></>}
-    </span>
+    <span className="tile-inner"><TileFace type={tile.type} /></span>
     <span className="tile-shine" />
     {tile.type === jokerType && <b className="joker-stamp">混</b>}
   </button>;
@@ -216,12 +313,12 @@ function WallView({ round }: { round: PublicRoundState | null }) {
 }
 
 function PlayerSeat({ player, position, round, isSelf, reveal }: { player: PublicPlayerState; position: SeatPosition; round: PublicRoomState["round"]; isSelf: boolean; reveal: boolean }) {
-  const latest = round?.lastAction?.type === "discard" && round.lastAction.playerId === player.playerId ? Number(round.lastAction.tileType) : null;
+  const latestDiscardId = round?.latestDiscard?.playerId === player.playerId ? round.latestDiscard.tileId : null;
   return <div className={`player-seat ${position} ${player.isTurn ? "turn-seat" : ""}`} data-seat={player.seat}>
     <PlayerInfo player={player} />
     <MeldArea melds={player.melds} jokerType={round?.jokerType ?? null} />
     <PlayerHand player={player} isSelf={isSelf} reveal={reveal} isTurn={player.isTurn} jokerType={round?.jokerType ?? null} />
-    <DiscardGrid tiles={player.discards} jokerType={round?.jokerType ?? null} latestType={latest} />
+    <DiscardGrid tiles={player.discards} jokerType={round?.jokerType ?? null} latestTileId={latestDiscardId} />
     {player.isAutopilot && <span className="autopilot-tag">托管中</span>}
   </div>;
 }
@@ -247,8 +344,14 @@ function MeldArea({ melds, jokerType }: { melds: Meld[]; jokerType: TileType | n
   </div>)}</div>;
 }
 
-function DiscardGrid({ tiles, jokerType, latestType }: { tiles: Tile[]; jokerType: TileType | null; latestType: number | null }) {
-  return <div className="discard-grid" aria-label="弃牌区">{tiles.map((tile, index) => <MahjongTile key={tile.tileId} tile={tile} jokerType={jokerType} disabled size="discard" extraClass={latestType === tile.type && index === tiles.length - 1 ? "latest-discard" : ""} />)}</div>;
+function DiscardGrid({ tiles, jokerType, latestTileId }: { tiles: Tile[]; jokerType: TileType | null; latestTileId: string | null }) {
+  return <div className="discard-grid" aria-label="弃牌区">{tiles.map((tile) => {
+    const isLatest = latestTileId === tile.tileId;
+    return <span className={`discard-slot ${isLatest ? "latest-discard-slot" : ""}`} key={tile.tileId}>
+      <MahjongTile tile={tile} jokerType={jokerType} disabled size="discard" extraClass={isLatest ? "latest-discard" : ""} />
+      {isLatest && <span className="latest-discard-marker" aria-label="本回合最新打出的牌">▼</span>}
+    </span>;
+  })}</div>;
 }
 
 function CenterInfo({ round }: { round: PublicRoomState["round"] }) {

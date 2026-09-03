@@ -115,6 +115,22 @@ describe("authoritative GameRoom state", () => {
     const joker = current.hand.find((candidate) => candidate.type === room.round!.jokerType);
     if (joker) expect(() => room.discard(current.playerId, joker.tileId, "joker-action-12345678", room.round!.version)).toThrow("混儿");
   });
+  it("publishes one exact latest discard to every player and keeps it highlighted after the next draw", () => {
+    const { room, players } = readyRoom();
+    const current = players.find((player) => player.seat === room.round!.currentSeat)!;
+    const tile = current.hand.find((candidate) => candidate.type !== room.round!.jokerType)!;
+    room.discard(current.playerId, tile.tileId, "latest-discard-12345678", room.round!.version);
+    for (const playerId of [...(room.round?.reactionWindow?.eligible.keys() ?? [])]) {
+      room.reaction(playerId, { actionId: `latest-pass-${playerId}-12345678`, version: room.round!.version, kind: "pass" });
+    }
+    expect(room.round?.lastAction?.type).toBe("draw");
+    for (const viewer of players) {
+      const state = room.serializeForPlayer(viewer.playerId);
+      expect(state.room.round?.latestDiscard).toEqual({ playerId: current.playerId, tileId: tile.tileId });
+      expect(state.room.players.find((player) => player.playerId === current.playerId)?.discards.some((discard) => discard.tileId === tile.tileId)).toBe(true);
+    }
+    room.destroy();
+  });
 });
 
 describe("server-controlled bots and dice", () => {
